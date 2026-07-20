@@ -4,7 +4,8 @@ from writer.abstract import register_abstract_template
 from writer.blocks.base_block import WriterBlock
 from writer.ss_types import AbstractTemplate, WriterConfigurationError
 
-ALLOWED_CHARS = re.compile(r'^[A-Za-z0-9\-_]+$')
+ALLOWED_CHARS = re.compile(r"^[A-Za-z0-9\-_]+$")
+
 
 class WriterKeyValueStorage(WriterBlock):
     @classmethod
@@ -25,6 +26,7 @@ class WriterKeyValueStorage(WriterBlock):
                             "description": "What action to perform on the data (save, get, delete, list all keys).",
                             "options": {
                                 "Save": "Save",
+                                "Save memory": "Save memory",
                                 "Get": "Get",
                                 "Delete": "Delete",
                                 "List keys": "List keys",
@@ -50,6 +52,18 @@ class WriterKeyValueStorage(WriterBlock):
                             "name": "Value",
                             "type": "Text",
                             "description": "Data that you want to store.",
+                            "control": "Textarea",
+                        },
+                        "messages": {
+                            "name": "Conversation to memorize",
+                            "type": "Text",
+                            "description": (
+                                "Conversation to distill into reusable memory "
+                                "(used by the 'Save memory' action). A JSON list of "
+                                "{role, content} messages; reasoning traces are dropped "
+                                "and only task specs, data schemas, tool configs, and "
+                                "output constraints are kept."
+                            ),
                             "control": "Textarea",
                         },
                     },
@@ -92,12 +106,20 @@ class WriterKeyValueStorage(WriterBlock):
 
             key = self._get_field("key", required=True)
             if not ALLOWED_CHARS.fullmatch(key):
-                raise WriterConfigurationError("Key can only contain alphanumeric characters, underscores and hyphens")
+                raise WriterConfigurationError(
+                    "Key can only contain alphanumeric characters, underscores and hyphens"
+                )
 
             if action == "Save":
                 value_type = self._get_field("valueType")
                 value = self._get_field("value", as_json=value_type == "JSON")
                 return writer_kv_storage.save(key, value)
+            if action == "Save memory":
+                from writer.selective_memory import extract_selective_memory
+
+                messages = self._get_field("messages", as_json=True)
+                memory = extract_selective_memory(messages)
+                return writer_kv_storage.save(key, memory)
             if action == "Get":
                 return writer_kv_storage.get(key, type_="data")["data"]
             if action == "Delete":
