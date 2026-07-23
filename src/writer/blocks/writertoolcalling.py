@@ -3,6 +3,7 @@ from datetime import date
 
 from writer.abstract import register_abstract_template
 from writer.blocks.base_block import WriterBlock
+from writer.human_authorization import request_authorization
 from writer.ss_types import AbstractTemplate
 
 DEFAULT_MODEL = "palmyra-x5"
@@ -67,6 +68,16 @@ class WriterToolCalling(WriterBlock):
         import time
 
         def callable(**args):
+            # ACP-style human authorization gate at the agent->execution
+            # boundary: every tool invocation is observable on the trace and
+            # can be approved or denied. A denial raises AuthorizationDenied
+            # and unwinds the agent's multi-step loop (immediate interruption).
+            request_authorization(
+                action=tool_name,
+                parameters=args,
+                execution_environment=self.execution_environment,
+            )
+
             expanded_execution_environment = self.execution_environment | args
             raw_return_value = self.runner.run_branch(
                 self.component.id,
