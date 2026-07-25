@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.readiness import compute_readiness
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -188,7 +189,24 @@ class JournalRecord:
         if "journal" not in Config.feature_flags or not writer_kv_storage.is_accessible():
             return
         data = self.to_dict()
+        if "journal-readiness" in Config.feature_flags:
+            data = attach_readiness(data)
         writer_kv_storage.save(self.construct_key(), data)
+
+
+def attach_readiness(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach a deployment-readiness score to a serialized journal record.
+
+    Implements the LLM Readiness Harness contract ("execution records in ->
+    readiness scores out", arXiv:2603.27355) as a post-processor over the
+    Journal execution trace. Scoring is defensive: on any failure the record
+    is returned unchanged so journaling is never broken.
+    """
+    try:
+        data["readiness"] = compute_readiness(data)
+    except Exception:
+        logger.exception("Failed to compute readiness for a Journal entry")
+    return data
 
 
 _parent_journal_record: ContextVar[Optional[JournalRecord]] = ContextVar("parent_journal_record", default=None)
