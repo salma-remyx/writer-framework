@@ -17,6 +17,7 @@ from writer.blocks.uieventtrigger import UIEventTrigger
 from writer.blocks.writeraddchatmessage import WriterAddChatMessage
 from writer.blocks.writeraddtokg import WriterAddToKG
 from writer.blocks.writeraskkg import WriterAskGraphQuestion
+from writer.blocks.writerattributioncheck import WriterAttributionCheck
 from writer.blocks.writerchat import WriterChat
 from writer.blocks.writerchatreply import WriterChatReply
 from writer.blocks.writerchatreplywithtoolconfig import WriterChatReplyWithToolConfig
@@ -58,6 +59,7 @@ ChangePage.register("blueprints_changepage")
 WriterStructuredOutput.register("blueprints_writerstructuredoutput")
 WriterToolCalling.register("blueprints_writertoolcalling")
 WriterAskGraphQuestion.register("blueprints_writeraskgraphquestion")
+WriterAttributionCheck.register("blueprints_writerattributioncheck")
 WriterParsePDFByFileID.register("blueprints_writerparsepdf")
 WriterUploadFile.register("blueprints_writeruploadfile")
 WriterVision.register("blueprints_writervision")
