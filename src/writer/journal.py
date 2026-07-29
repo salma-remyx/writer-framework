@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.provenance import build_provenance_graph
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -121,11 +122,22 @@ class JournalRecord:
             "blockOutputs": block_outputs,
             "result": self.result,
         }
+        if "journal_provenance" in Config.feature_flags:
+            data["provenance"] = self._build_provenance_view(block_outputs)
         sanitized_data = self._sanitize_data(data)
         return {
             **sanitized_data,
             "isRunable": self.is_runable,
         }
+
+    def _build_provenance_view(self, block_outputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Derive a structured provenance/dataflow graph for this run.
+
+        Turns the flat chronological ``blockOutputs`` into actions, artifacts
+        and dataflow edges (the blueprint wiring) -- see ``writer.provenance``.
+        """
+        topology = {node.id: node.outputs for node in self.graph.nodes}
+        return build_provenance_graph(block_outputs, topology).to_dict()
 
     def get_execution_data(self, graph_node: "GraphNode") -> Dict[str, Any]:
         execution_data: Dict[str, Any] = {
