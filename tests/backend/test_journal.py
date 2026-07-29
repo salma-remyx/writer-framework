@@ -75,6 +75,7 @@ class TestJournal:
             },
             "isRunable": True,
             "result": "success",
+            "provenance": ANY,
         }
 
     def test_cron_entry(self, mock_kv_storage):
@@ -110,6 +111,7 @@ class TestJournal:
             "blockOutputs": ANY,
             "isRunable": True,
             "result": "success",
+            "provenance": ANY,
         }
 
     @pytest.mark.asyncio
@@ -151,6 +153,7 @@ class TestJournal:
                 "blockOutputs": ANY,
                 "isRunable": True,
                 "result": "success",
+                "provenance": ANY,
             }
 
     @pytest.mark.asyncio
@@ -192,6 +195,7 @@ class TestJournal:
                 "blockOutputs": ANY,
                 "isRunable": True,
                 "result": "success",
+                "provenance": ANY,
             }
 
     @pytest.mark.asyncio
@@ -228,6 +232,7 @@ class TestJournal:
                 "blockOutputs": ANY,
                 "isRunable": True,
                 "result": "success",
+                "provenance": ANY,
             }
 
     @pytest.mark.asyncio
@@ -268,6 +273,7 @@ class TestJournal:
                 "blockOutputs": ANY,
                 "isRunable": True,
                 "result": "success",
+                "provenance": ANY,
             }
 
     @pytest.mark.asyncio
@@ -307,4 +313,55 @@ class TestJournal:
                 "blockOutputs": ANY,
                 "isRunable": True,
                 "result": "error",
+                "provenance": ANY,
             }
+
+    def test_provenance_graph(self, mock_kv_storage):
+        asgi_app = writer.serve.get_asgi_app(test_app_dir, "run")
+        blueprint_id = "m4gycroojx6am4cq"
+
+        with fastapi.testclient.TestClient(asgi_app) as client:
+            with client.stream(
+                "POST",
+                f"/private/api/blueprint/{blueprint_id}",
+                json={"proposedSessionId": None},
+                headers={"Content-Type": "application/json"},
+            ) as response:
+                assert response.status_code == 200
+
+        entry = mock_kv_storage._data_storage.values()[0]
+        provenance = entry["provenance"]
+
+        # One action per block in the run graph. The API path executes the
+        # apitrigger and the logmessage it feeds.
+        assert provenance["actionCount"] == len(provenance["actions"]) == 2
+        assert {action["id"] for action in provenance["actions"]} == {
+            "qfqpqmjdpzuu8fe9",
+            "pa448833kc2pis3a",
+        }
+        logmessage_action = next(
+            action for action in provenance["actions"] if action["id"] == "pa448833kc2pis3a"
+        )
+        assert logmessage_action["tool"] == "blueprints_logmessage"
+        assert logmessage_action["outcome"] == "success"
+
+        # Producer/consumer edge derived from the blueprint's toNodeId control
+        # edge: apitrigger -> logmessage along the "trigger" branch.
+        assert provenance["edgeCount"] == len(provenance["edges"]) == 1
+        assert provenance["edges"][0] == {
+            "artifact": "qfqpqmjdpzuu8fe9",
+            "producer": "qfqpqmjdpzuu8fe9",
+            "consumer": "pa448833kc2pis3a",
+            "outId": "trigger",
+        }
+
+        # Captured block outputs surface as data artifacts. The logmessage
+        # produced the string "AAA".
+        assert provenance["artifactCount"] == len(provenance["artifacts"]) == 2
+        logmessage_artifact = next(
+            artifact
+            for artifact in provenance["artifacts"]
+            if artifact["producedBy"] == "pa448833kc2pis3a"
+        )
+        assert logmessage_artifact["kind"] == "string"
+        assert logmessage_artifact["preview"] == "AAA"

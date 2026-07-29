@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.provenance import build_provenance_graph
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -120,6 +121,11 @@ class JournalRecord:
             "trigger": self.trigger,
             "blockOutputs": block_outputs,
             "result": self.result,
+            # Structured dataflow view of this run (AgentTrails-style provenance
+            # graph): actions/artifacts/edges derived from the blueprint graph's
+            # toNodeId control edges and the captured block outputs. Additive --
+            # the chronological blockOutputs above are left untouched.
+            "provenance": build_provenance_graph(self),
         }
         sanitized_data = self._sanitize_data(data)
         return {
