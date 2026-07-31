@@ -1,5 +1,6 @@
 from writer.abstract import register_abstract_template
 from writer.blocks.base_block import WriterBlock
+from writer.blocks.tool_gating import latest_user_intent, select_relevant_tools
 from writer.ss_types import AbstractTemplate, WriterConfigurationError
 
 DEFAULT_MODEL = "palmyra-x5"
@@ -284,6 +285,7 @@ class WriterChatReplyWithToolConfig(WriterBlock):
                 raise WriterConfigurationError(f"Invalid numeric value in configuration: {e}")
             use_streaming = self._get_field("useStreaming", False, "yes") == "yes"
             tools_raw = self._get_field("tools", True)
+            tool_config = self._get_field("toolConfig", True) or {}
 
             tools = []
 
@@ -370,6 +372,14 @@ class WriterChatReplyWithToolConfig(WriterBlock):
                     "No valid tools could be created from the provided tools configuration. "
                     "Please check that tools have the required fields and valid structure."
                 )
+
+            # Gate the toolset to the subset relevant to this turn's intent
+            # before injecting it into the completion call — opt-in via
+            # toolConfig.toolGating to cut the per-turn "Tools Tax". A no-op
+            # when disabled, so the tools=[FunctionTool...] contract holds.
+            tools = select_relevant_tools(
+                tools, latest_user_intent(conversation.messages), tool_config
+            )
 
             msg = ""
             if not use_streaming:
