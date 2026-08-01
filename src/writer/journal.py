@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.provenance_graph import build_provenance_graph
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -121,6 +122,11 @@ class JournalRecord:
             "blockOutputs": block_outputs,
             "result": self.result,
         }
+        # Attach a structured provenance / dataflow graph (action nodes +
+        # dependency edges) on top of the flat blockOutputs, opt-in behind
+        # the "journal_provenance" feature flag.
+        if "journal_provenance" in Config.feature_flags:
+            data["provenanceGraph"] = build_provenance_graph(self)
         sanitized_data = self._sanitize_data(data)
         return {
             **sanitized_data,
