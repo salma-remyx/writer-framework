@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.provenance import build_provenance_graph
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -121,6 +122,12 @@ class JournalRecord:
             "blockOutputs": block_outputs,
             "result": self.result,
         }
+        # AgentTrails-style provenance graph: the flat blockOutputs above are
+        # chronological; this projects them into an action/artifact dataflow
+        # DAG so dependencies and taken/untaken branches are inspectable.
+        # Opt-in, matching the journal's own feature-flag gating.
+        if "journal.provenance" in Config.feature_flags:
+            data["provenance"] = build_provenance_graph(self.graph, block_outputs)
         sanitized_data = self._sanitize_data(data)
         return {
             **sanitized_data,
