@@ -1,5 +1,6 @@
 from writer.abstract import register_abstract_template
 from writer.blocks.base_block import WriterBlock
+from writer.blocks.memory_reconstruction import reconstruct_memory
 from writer.ss_types import AbstractTemplate, WriterConfigurationError
 
 DEFAULT_MODEL = "palmyra-x5"
@@ -86,6 +87,13 @@ class WriterChatReply(WriterBlock):
                                 },
                                 "additionalProperties": False,
                             },
+                        },
+                        "retrievedMemory": {
+                            "name": "Retrieved memory",
+                            "type": "Text",
+                            "control": "Textarea",
+                            "default": "",
+                            "desc": "Past experience retrieved for this reply (e.g. from a Key-Value Storage Get). Instead of replaying it verbatim, the block reconstructs it into context-grounded guidance for the current turn. Leave empty to disable.",
                         },
                         "generateReply": {
                             "name": "Generate reply",
@@ -228,6 +236,15 @@ class WriterChatReply(WriterBlock):
                 self.result = ""
                 self.outcome = "success"
                 return
+
+            # Reconstructive memory (opt-in): instead of replaying retrieved
+            # experience verbatim, critique and reconstruct it against the
+            # current turn and inject the guidance before generating a reply.
+            retrieved_memory = self._get_field("retrievedMemory", False, default_field_value=None)
+            guidance = reconstruct_memory(retrieved_memory, conversation, model_id=init_model_id)
+            if guidance:
+                conversation.add("system", guidance)
+                self._set_state(conversation_state_element, conversation)
 
             for tool_name, tool_raw in tools_raw.items():
                 tool_type = tool_raw.get("type")
