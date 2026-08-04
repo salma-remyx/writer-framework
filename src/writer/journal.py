@@ -80,6 +80,7 @@ class JournalRecord:
 
         self.is_runable = True
         self.result: Optional[Literal["success", "error", "stopped"]] = None
+        self._provenance_cache: Optional[Dict[str, Any]] = None
 
     def _get_block_info(self, component: "Component") -> Dict[str, str]:
         block_title = component.content.get("alias")
@@ -178,6 +179,21 @@ class JournalRecord:
     def set_result(self, result: Literal["success", "error", "stopped"]) -> None:
         self.result = result
 
+    def provenance(self) -> Dict[str, Any]:
+        """Artifact-level dataflow view of this record.
+
+        Converts the chronological per-node execution log into an
+        AgentTrails-style provenance graph (actions = block executions,
+        artifacts = the data dependencies between them). Pure addition: the
+        result is cached on the instance and never changes the payload
+        produced by ``to_dict()``.
+        """
+        if self._provenance_cache is None:
+            from writer.provenance import build_provenance_graph
+
+            self._provenance_cache = build_provenance_graph(self).to_dict()
+        return self._provenance_cache
+
     def add_nested_execution(self, nested_record: "JournalRecord") -> None:
         for graph_node in nested_record.graph.nodes:
             if graph_node.id not in self.block_outputs:
@@ -213,6 +229,12 @@ def use_journal_record_context(
         raise e
     finally:
         _current_journal_record.set(None)
+        # Materialize the provenance view now that the run is complete; this
+        # is best-effort and must never break the journal itself.
+        try:
+            current_record.provenance()
+        except Exception:
+            logger.debug("Failed to materialize journal provenance", exc_info=True)
         if parent_record is not None:
             parent_record.add_nested_execution(current_record)
         else:
