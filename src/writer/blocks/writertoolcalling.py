@@ -40,6 +40,24 @@ class WriterToolCalling(WriterBlock):
                             "init": "",
                             "category": "Tools",
                         },
+                        "useToolGating": {
+                            "name": "Use tool gating",
+                            "type": "Boolean",
+                            "default": "no",
+                            "desc": "When enabled, only the tools whose schema is relevant to the "
+                            "prompt are injected into each model turn (dynamic tool gating), "
+                            "cutting per-turn tool-schema overhead. Off by default.",
+                            "validator": {"type": "boolean"},
+                            "category": "Tools",
+                        },
+                        "maxGatedTools": {
+                            "name": "Max active tools",
+                            "type": "Number",
+                            "default": 0,
+                            "desc": "When tool gating is on, cap the number of query-relevant tools "
+                            "injected per turn. 0 means no cap.",
+                            "category": "Tools",
+                        },
                     },
                     "outs": {
                         "tools": {
@@ -222,6 +240,15 @@ class WriterToolCalling(WriterBlock):
             max_iterations = max(1, int(self._get_field("maxIterations", False, "10")))
             conversation = writer.ai.Conversation()
             tools = self._get_tools()
+
+            if self._get_field("useToolGating", False, "no") == "yes":
+                # Dynamic tool gating: inject only the query-relevant tool
+                # schemas per turn instead of the full eager set.
+                from writer.blocks.tool_gate import gate_tools
+
+                raw_max = self._get_field("maxGatedTools", False, "0") or "0"
+                max_tools = max(0, int(raw_max))
+                tools = gate_tools(prompt, tools, max_tools=max_tools or None)
 
             conversation += {"role": "user", "content": self._get_react_prompt(prompt)}
 
