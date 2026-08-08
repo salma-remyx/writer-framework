@@ -22,6 +22,7 @@ from writer.blocks.writerchatreply import WriterChatReply
 from writer.blocks.writerchatreplywithtoolconfig import WriterChatReplyWithToolConfig
 from writer.blocks.writerclassification import WriterClassification
 from writer.blocks.writercompletion import WriterCompletion
+from writer.blocks.writerdocumentsearch import WriterDocumentSearch
 from writer.blocks.writerfileapi import WriterUploadFile
 from writer.blocks.writerinitchat import WriterInitChat
 from writer.blocks.writerkeyvaluestorage import WriterKeyValueStorage
@@ -35,6 +36,7 @@ from writer.blocks.writerwebsearch import WriterWebSearch
 SetState.register("blueprints_setstate")
 WriterClassification.register("blueprints_writerclassification")
 WriterCompletion.register("blueprints_writercompletion")
+WriterDocumentSearch.register("blueprints_writerdocumentsearch")
 WriterChatReply.register("blueprints_writerchatreply")
 HTTPRequest.register("blueprints_httprequest")
 RunBlueprint.register("blueprints_runblueprint")
