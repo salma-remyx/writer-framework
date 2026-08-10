@@ -1,11 +1,27 @@
 import textwrap
 from datetime import date
+from typing import Any, List
 
 from writer.abstract import register_abstract_template
 from writer.blocks.base_block import WriterBlock
 from writer.ss_types import AbstractTemplate
 
 DEFAULT_MODEL = "palmyra-x5"
+
+
+def _content_to_text(content: Any) -> str:
+    """Flatten a message's content (str or list of fragments) to text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for fragment in content:
+            if isinstance(fragment, str):
+                parts.append(fragment)
+            elif isinstance(fragment, dict):
+                parts.append(str(fragment.get("text") or ""))
+        return " ".join(p for p in parts if p)
+    return str(content or "")
 
 
 class WriterToolCalling(WriterBlock):
@@ -38,6 +54,21 @@ class WriterToolCalling(WriterBlock):
                             "type": "Tools",
                             "default": "{}",
                             "init": "",
+                            "category": "Tools",
+                        },
+                        "toolGating": {
+                            "name": "Tool gating",
+                            "type": "Text",
+                            "control": "Toggle",
+                            "default": "no",
+                            "desc": "Score each tool's schema against the current turn and inject only the most relevant ones, reducing the per-turn Tools Tax. Off preserves eager behavior.",
+                            "category": "Tools",
+                        },
+                        "maxToolsPerTurn": {
+                            "name": "Max tools per turn",
+                            "type": "Number",
+                            "default": 5,
+                            "desc": "When tool gating is on, how many tools (besides the control tool) to expose to the model each turn.",
                             "category": "Tools",
                         },
                     },
@@ -169,6 +200,39 @@ class WriterToolCalling(WriterBlock):
 
         return tools
 
+    def _current_intent(self) -> str:
+        """Best available signal for what the agent should do this turn.
+
+        Prefers the most recent conversational message (the live turn intent
+        -- e.g. the assistant's latest plan after a tool result); falls back
+        to the original task prompt when no message is available yet.
+        """
+        conversation = getattr(self, "_conversation", None)
+        messages = getattr(conversation, "messages", None)
+        if messages:
+            last = messages[-1]
+            content = (
+                last.get("content") if isinstance(last, dict) else getattr(last, "content", "")
+            )
+            if content:
+                return _content_to_text(content)
+        prompt = self._get_field("prompt", required=False)
+        return str(prompt or "")
+
+    def _select_tools(self, tools):
+        """Gate ``tools`` to the most relevant subset for the current turn.
+
+        Implements the Tool Attention gating step (adapted from
+        arXiv:2604.21816v1): score every tool's schema against the current
+        intent and return only the top-k, instead of eagerly injecting all
+        schemas every turn. Control tools (e.g. ``disclose_reasoning``) are
+        always kept so the ReAct loop can still finalize.
+        """
+        from writer.blocks.tool_gating import select_tools
+
+        max_tools = int(self._get_field("maxToolsPerTurn", False, "5"))
+        return select_tools(self._current_intent(), tools, max_tools)
+
     def _get_react_prompt(self, base_prompt: str):
         return textwrap.dedent(f"""
             You're a ReAct agent. Your knowledge cut-off date is 2024, but today is {str(date.today())}.
@@ -221,13 +285,18 @@ class WriterToolCalling(WriterBlock):
             model_id = self._get_field("modelId", False, default_field_value=DEFAULT_MODEL)
             max_iterations = max(1, int(self._get_field("maxIterations", False, "10")))
             conversation = writer.ai.Conversation()
+            self._conversation = conversation
             tools = self._get_tools()
+            tool_gating_enabled = self._get_field("toolGating", False, "no") == "yes"
 
             conversation += {"role": "user", "content": self._get_react_prompt(prompt)}
 
             for i in range(max_iterations):
                 config = {"model": model_id, "temperature": 0.1}
-                msg = conversation.complete(tools=tools, config=config)
+                # Tool Attention (arXiv:2604.21816v1): inject only the tools
+                # most relevant to the current turn instead of all schemas.
+                active_tools = self._select_tools(tools) if tool_gating_enabled else tools
+                msg = conversation.complete(tools=active_tools, config=config)
                 conversation += msg
                 if self.is_complete:
                     # According to the protocol, after disclose_reasoning with status="DONE",
