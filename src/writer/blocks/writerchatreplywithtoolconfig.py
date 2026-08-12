@@ -182,6 +182,15 @@ class WriterChatReplyWithToolConfig(WriterBlock):
             import httpx
 
             from writer.core import get_session
+
+            # Deterministic logic-reasoning tool: route to the local engine
+            # instead of the (mocked) gateway so one MCP tool has a real,
+            # auditable backend. Adapted from Euclid-MCP (arXiv:2607.21412).
+            if function_name == "logic_reasoning":
+                from writer.logical_reasoning import run_logic_reasoning
+
+                return run_logic_reasoning(**args)
+
             current_session = get_session()
             
             org_id = None
