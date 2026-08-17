@@ -80,6 +80,7 @@ class WriterKeyValueStorage(WriterBlock):
     def _execute_action(self):
         from writer.journal import JOURNAL_KEY_PREFIX
         from writer.keyvalue_storage import KeyValueStorage
+        from writer.workflow_card import WORKFLOW_CARD_KEY_PREFIX
 
         action = self._get_field("action", default_field_value="Save")
 
@@ -88,7 +89,8 @@ class WriterKeyValueStorage(WriterBlock):
 
             if action == "List keys":
                 response = writer_kv_storage.get_data_keys()
-                return [key for key in response if not key.startswith(JOURNAL_KEY_PREFIX)]
+                internal_prefixes = (JOURNAL_KEY_PREFIX, WORKFLOW_CARD_KEY_PREFIX)
+                return [key for key in response if not key.startswith(internal_prefixes)]
 
             key = self._get_field("key", required=True)
             if not ALLOWED_CHARS.fullmatch(key):

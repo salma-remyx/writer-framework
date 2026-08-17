@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
 import writer.abstract
 from writer.core import Config
 from writer.keyvalue_storage import writer_kv_storage
+from writer.workflow_card import save_workflow_card
 
 if TYPE_CHECKING:
     from writer.blueprints import Graph, GraphNode
@@ -189,6 +190,7 @@ class JournalRecord:
             return
         data = self.to_dict()
         writer_kv_storage.save(self.construct_key(), data)
+        save_workflow_card(self.construct_key(), data, storage=writer_kv_storage)
 
 
 _parent_journal_record: ContextVar[Optional[JournalRecord]] = ContextVar("parent_journal_record", default=None)
